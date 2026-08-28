@@ -246,6 +246,16 @@ footer .privacy{font-weight:700;color:var(--brand)}
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* ===== 色の選択 ================================================= */
+input[type=color]{
+  width:100%;height:38px;padding:3px;
+  border:1.5px solid var(--line-strong);border-radius:6px;
+  background:var(--surface);cursor:pointer;
+}
+input[type=color]:disabled{opacity:.45;cursor:not-allowed}
+input[type=color]:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+select:disabled{opacity:.5;cursor:not-allowed;background:var(--surface-2)}
+
 </style>
 </head>
 <body>
@@ -449,6 +459,30 @@ footer .privacy{font-weight:700;color:var(--brand)}
       <div class="card">
         <h2><span class="num">5</span>QRコード</h2>
         <div class="qrbox" id="qrbox"><div class="qr-none">URLが確定すると<br>QRコードが表示されます</div></div>
+        <div class="qropts">
+          <div class="field">
+            <label class="lb" for="qrColor">QRコードの色</label>
+            <select id="qrColor"></select>
+          </div>
+          <div class="field">
+            <label class="lb" for="qrColorCustom">色を自分で選ぶ</label>
+            <input type="color" id="qrColorCustom" value="#000000" disabled>
+          </div>
+        </div>
+        <p class="hint" id="colorNote">背景は白のまま固定です。白地に濃い色という組み合わせが最も確実に読み取れます。</p>
+        <div class="msg" id="msgColor"></div>
+
+        <div class="field" style="margin-top:12px">
+          <label class="lb" for="qrCenter">中央に入れる文字<span class="opt">任意</span></label>
+          <input type="text" id="qrCenter" autocomplete="off" placeholder="例：予約" maxlength="6">
+          <p class="hint">
+            QRコードの真ん中に文字を重ねます。<b>6文字まで。2〜4文字を推奨します。</b><br>
+            文字を入れると、その部分のマス目が隠れます。読み取りを保つため、
+            <b>誤り訂正レベルは自動でH（最高）になります。</b>
+          </p>
+          <div class="msg" id="msgCenter"></div>
+        </div>
+
         <div class="qropts">
           <div class="field">
             <label class="lb" for="qrEcl">誤り訂正レベル</label>
@@ -907,15 +941,51 @@ var QR = (function () {
     throw new Error('データが長すぎてQRコードに収まりません');
   }
 
+  // --- 中央テキスト（ロゴ枠）の配置計算 --------------------------------
+
+  /* 中央に置く白抜き枠の位置と大きさをモジュール単位で求める。
+     SVGとcanvasで必ず同じ結果になるよう、計算をここに一本化する。
+     覆った部分は誤り訂正で復元されるため、比率を上げすぎると読めなくなる。 */
+  function overlayBox(size, ratio) {
+    var side = Math.round(size * ratio);
+    if (side % 2 !== size % 2) side += 1;   // 中央に正確に置くため偶奇をそろえる
+    if (side < 3) side = 3;
+    var x0 = (size - side) / 2;
+    return { x: x0, y: x0, side: side };
+  }
+
+  // 中央テキストを使うときの上限比率（この値を超えると読み取り率が落ちる）
+  var CENTER_MAX_RATIO = 0.20;
+
+  function normOpts(o) {
+    o = o || {};
+    return {
+      dark: o.dark || '#000000',
+      light: o.light || '#ffffff',
+      centerText: (o.centerText || '').toString(),
+      centerRatio: Math.min(o.centerRatio || CENTER_MAX_RATIO, CENTER_MAX_RATIO),
+      fontFamily: o.fontFamily ||
+        "'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic','Meiryo',sans-serif"
+    };
+  }
+
+  function escapeXml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c];
+    });
+  }
+
   /**
    * QRコードをSVG文字列に変換する
    * @param {object} qr      encode() の戻り値
    * @param {number} margin  余白（モジュール数。規格上4以上）
    * @param {number} px      1モジュールあたりのピクセル数
+   * @param {object} opts    { dark, light, centerText, centerRatio }
    */
-  function toSvg(qr, margin, px) {
+  function toSvg(qr, margin, px, opts) {
     margin = (margin === undefined) ? 4 : margin;
     px = px || 8;
+    var o = normOpts(opts);
     var dim = qr.size + margin * 2;
     var path = [];
     for (var y = 0; y < qr.size; y++) {
@@ -923,26 +993,41 @@ var QR = (function () {
         if (qr.modules[y][x]) path.push('M' + (x + margin) + ',' + (y + margin) + 'h1v1h-1z');
       }
     }
-    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + dim + ' ' + dim + '" ' +
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + dim + ' ' + dim + '" ' +
       'width="' + dim * px + '" height="' + dim * px + '" shape-rendering="crispEdges">' +
-      '<rect width="' + dim + '" height="' + dim + '" fill="#ffffff"/>' +
-      '<path d="' + path.join('') + '" fill="#000000"/></svg>';
+      '<rect width="' + dim + '" height="' + dim + '" fill="' + o.light + '"/>' +
+      '<path d="' + path.join('') + '" fill="' + o.dark + '"/>';
+
+    if (o.centerText) {
+      var b = overlayBox(qr.size, o.centerRatio);
+      var bx = b.x + margin, by = b.y + margin;
+      svg += '<rect x="' + bx + '" y="' + by + '" width="' + b.side + '" height="' + b.side +
+        '" rx="' + (b.side * 0.12) + '" fill="' + o.light + '"/>';
+      svg += '<text x="' + (dim / 2) + '" y="' + (dim / 2) + '" ' +
+        'text-anchor="middle" dominant-baseline="central" ' +
+        'font-family="' + o.fontFamily + '" font-weight="700" ' +
+        'font-size="' + (b.side * 0.62) + '" ' +
+        'textLength="' + (b.side * 0.78) + '" lengthAdjust="spacingAndGlyphs" ' +
+        'fill="' + o.dark + '" shape-rendering="auto">' + escapeXml(o.centerText) + '</text>';
+    }
+    return svg + '</svg>';
   }
 
   /**
    * QRコードをcanvasに描画する
    */
-  function toCanvas(qr, canvas, sizePx, margin) {
+  function toCanvas(qr, canvas, sizePx, margin, opts) {
     margin = (margin === undefined) ? 4 : margin;
+    var o = normOpts(opts);
     var dim = qr.size + margin * 2;
     var scale = Math.max(1, Math.floor(sizePx / dim));
     var actual = dim * scale;
     canvas.width = actual;
     canvas.height = actual;
     var ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = o.light;
     ctx.fillRect(0, 0, actual, actual);
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = o.dark;
     for (var y = 0; y < qr.size; y++) {
       for (var x = 0; x < qr.size; x++) {
         if (qr.modules[y][x]) {
@@ -950,10 +1035,61 @@ var QR = (function () {
         }
       }
     }
+
+    if (o.centerText) {
+      var b = overlayBox(qr.size, o.centerRatio);
+      var bx = (b.x + margin) * scale, by = (b.y + margin) * scale, bs = b.side * scale;
+      var r = bs * 0.12;
+      ctx.fillStyle = o.light;
+      ctx.beginPath();
+      // 角丸の白抜き枠
+      ctx.moveTo(bx + r, by);
+      ctx.arcTo(bx + bs, by, bx + bs, by + bs, r);
+      ctx.arcTo(bx + bs, by + bs, bx, by + bs, r);
+      ctx.arcTo(bx, by + bs, bx, by, r);
+      ctx.arcTo(bx, by, bx + bs, by, r);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = o.dark;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var fs = bs * 0.62;
+      ctx.font = '700 ' + fs + 'px ' + o.fontFamily;
+      // 枠に収まるまで文字を縮める
+      var maxW = bs * 0.78;
+      while (fs > 4 && ctx.measureText(o.centerText).width > maxW) {
+        fs -= 1;
+        ctx.font = '700 ' + fs + 'px ' + o.fontFamily;
+      }
+      ctx.fillText(o.centerText, actual / 2, actual / 2);
+    }
     return canvas;
   }
 
-  return { encode: encode, toSvg: toSvg, toCanvas: toCanvas };
+  /* 前景色と背景色の明るさの差を測る（0〜21）。
+     QRコードは明暗のコントラストで読み取るため、この値が小さいと読めない。 */
+  function contrastRatio(hex1, hex2) {
+    function lum(hex) {
+      var m = /^#?([0-9a-f]{6})$/i.exec(hex);
+      if (!m) return 0;
+      var n = parseInt(m[1], 16);
+      var c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(function (v) {
+        v /= 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    }
+    var a = lum(hex1), b = lum(hex2);
+    var hi = Math.max(a, b), lo = Math.min(a, b);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  return {
+    encode: encode, toSvg: toSvg, toCanvas: toCanvas,
+    overlayBox: overlayBox, contrastRatio: contrastRatio,
+    CENTER_MAX_RATIO: CENTER_MAX_RATIO
+  };
 })();
 
 
@@ -1032,6 +1168,18 @@ var MEDIUM_MASTER = [
   { v:'email',    label:'email（メール）' }
 ];
 
+/* QRコードの色。白地に対するコントラスト比が十分高いものだけを並べている
+   （背景は白で固定。白地に濃い色という組み合わせが最も確実に読み取れる） */
+var QR_COLORS = [
+  { v:'#000000', label:'黒（推奨）' },
+  { v:'#1b3a5c', label:'濃紺' },
+  { v:'#0e5f56', label:'深緑' },
+  { v:'#7a1f2b', label:'えんじ' },
+  { v:'#452a63', label:'濃紫' },
+  { v:'#4a3423', label:'濃茶' },
+  { v:'custom',  label:'その他（自分で選ぶ）' }
+];
+
 /* GA4のデフォルトチャネルグループに載る代表的なメディア値
    これ以外を使うと Unassigned になりうるため警告する */
 var SAFE_MEDIUM = ['organic','referral','social','email','affiliate','cpc','ppc','display','paid_social','audio','sms','push'];
@@ -1046,6 +1194,7 @@ var elBase=$('baseUrl'), elSrc=$('source'), elSub=$('sourceSub'),
     elSrcSel=$('srcSel'), elMedSel=$('medSel'), elSrcPrev=$('srcPreview'),
     elResult=$('result'), elQrBox=$('qrbox'), elQrMeta=$('qrmeta'),
     elEcl=$('qrEcl'), elSize=$('qrSize'),
+    elColor=$('qrColor'), elColorCustom=$('qrColorCustom'), elCenter=$('qrCenter'),
     btnCopy=$('btnCopy'), btnPng=$('btnPng'), btnSvg=$('btnSvg'), btnReset=$('btnReset');
 
 var currentUrl = '';    // 生成済みURL
@@ -1332,8 +1481,52 @@ function renderResult(url){
 /* =====================================================================
    QRコードの描画
    ===================================================================== */
+/* 選んでいる色を返す */
+function qrColor(){
+  return elColor.value === 'custom' ? elColorCustom.value : elColor.value;
+}
+
+/* 描画に使う設定をまとめる */
+function qrOptions(){
+  return {
+    dark: qrColor(),
+    light: '#ffffff',
+    centerText: elCenter.value.trim(),
+    centerRatio: QR.CENTER_MAX_RATIO
+  };
+}
+
+/* 色のコントラストと中央テキストの状態を点検する */
+function checkQrStyle(){
+  // 中央に文字を入れるときは誤り訂正を最高（H）に固定する
+  var hasText = !!elCenter.value.trim();
+  if(hasText){
+    elEcl.value = 'H';
+    elEcl.disabled = true;
+    setMsg('msgCenter','マス目が隠れるため、誤り訂正レベルを H（最高）にしました。'
+      + '印刷前に必ず実機で読み取り確認をしてください。','warn');
+  } else {
+    elEcl.disabled = false;
+    setMsg('msgCenter','');
+  }
+
+  // 白地に対するコントラスト比を見る
+  var ratio = QR.contrastRatio(qrColor(), '#ffffff');
+  var r = Math.round(ratio * 10) / 10;
+  if(ratio >= 7){
+    setMsg('msgColor','');
+  } else if(ratio >= 4.5){
+    setMsg('msgColor','白地とのコントラスト比 ' + r + '。やや薄めです。'
+      + '印刷後に必ず実機で読み取り確認をしてください。','warn');
+  } else {
+    setMsg('msgColor','白地とのコントラスト比 ' + r + '。薄すぎます。'
+      + '読み取れない可能性が高いため、もっと濃い色をおすすめします。');
+  }
+}
+
 function renderQr(url){
   elQrBox.textContent='';
+  checkQrStyle();
   try{
     currentQr = QR.encode(url, elEcl.value);
   }catch(e){
@@ -1343,7 +1536,7 @@ function renderQr(url){
     elQrMeta.textContent=''; btnPng.disabled=true; btnSvg.disabled=true; return;
   }
   var holder=document.createElement('div');
-  holder.innerHTML = QR.toSvg(currentQr, 4, 6);
+  holder.innerHTML = QR.toSvg(currentQr, 4, 6, qrOptions());
   var svg = holder.firstChild;
   svg.setAttribute('width','260'); svg.setAttribute('height','260');
   svg.setAttribute('role','img');
@@ -1351,8 +1544,10 @@ function renderQr(url){
   elQrBox.appendChild(svg);
 
   var warn = url.length > 500 ? '　※URLが長く読み取りにくくなる可能性があります' : '';
+  var ct = elCenter.value.trim();
   elQrMeta.textContent = 'バージョン ' + currentQr.version + '（' + currentQr.size + '×' + currentQr.size +
-    'モジュール）／誤り訂正 ' + currentQr.ecl + '／URL ' + url.length + '文字' + warn;
+    'モジュール）／誤り訂正 ' + currentQr.ecl + '／URL ' + url.length + '文字'
+    + (ct ? '／中央「' + ct + '」' : '') + warn;
   btnPng.disabled=false; btnSvg.disabled=false;
 }
 
@@ -1436,14 +1631,14 @@ function download(blob, name){
 
 function saveSvg(){
   if(!currentQr) return;
-  download(new Blob([QR.toSvg(currentQr, 4, 8)], {type:'image/svg+xml'}), fileName('svg'));
+  download(new Blob([QR.toSvg(currentQr, 4, 8, qrOptions())], {type:'image/svg+xml'}), fileName('svg'));
   toast('SVGを保存しました');
 }
 
 function savePng(){
   if(!currentQr) return;
   var canvas=document.createElement('canvas');
-  QR.toCanvas(currentQr, canvas, parseInt(elSize.value,10), 4);
+  QR.toCanvas(currentQr, canvas, parseInt(elSize.value,10), 4, qrOptions());
   canvas.toBlob(function(blob){
     if(!blob){ setMsg('msgAll','PNGの生成に失敗しました。SVGでの保存をお試しください。'); return; }
     download(blob, fileName('png'));
@@ -1456,6 +1651,9 @@ function resetAll(){
   [elSrc,elSub,elMed,elCmp,elCnt,elId,elTrm].forEach(function(el){ el.value=''; });
   elSrcSel.value=''; elMedSel.value='';
   curPreset=null; autoCampaign='';
+  elColor.value='#000000'; elColorCustom.value='#000000'; elColorCustom.disabled=true;
+  elCenter.value=''; elEcl.value='M'; elEcl.disabled=false;
+  setMsg('msgColor',''); setMsg('msgCenter','');
   elSrcPrev.style.display='none'; elSrcPrev.textContent='';
   var checked=document.querySelector('input[name=preset]:checked');
   if(checked) checked.checked=false;
@@ -1563,6 +1761,22 @@ buildSelects();
   el.addEventListener('input', update);
   el.addEventListener('blur', update);
 });
+// 色の選択肢を組み立てる
+QR_COLORS.forEach(function(c){
+  var o=document.createElement('option'); o.value=c.v; o.textContent=c.label;
+  elColor.appendChild(o);
+});
+elColor.addEventListener('change', function(){
+  elColorCustom.disabled = (this.value !== 'custom');
+  if(this.value !== 'custom') elColorCustom.value = this.value;
+  if(currentUrl) renderQr(currentUrl); else checkQrStyle();
+});
+elColorCustom.addEventListener('input', function(){
+  if(currentUrl) renderQr(currentUrl); else checkQrStyle();
+});
+elCenter.addEventListener('input', function(){
+  if(currentUrl) renderQr(currentUrl); else checkQrStyle();
+});
 elEcl.addEventListener('change', function(){ if(currentUrl) renderQr(currentUrl); });
 btnCopy.addEventListener('click', copyUrl);
 btnPng.addEventListener('click', savePng);
@@ -1610,7 +1824,20 @@ window.__utmBuilder = {
   },
   openSetting: function(){ btnSetting.click(); },
   clearStorage: function(){ try{ window.localStorage.removeItem(STORE_KEY); }catch(e){} },
-  storeKey: STORE_KEY
+  storeKey: STORE_KEY,
+  qrOptions: qrOptions,
+  setQrStyle: function(color, centerText){
+    if(color!==undefined){
+      var known = QR_COLORS.some(function(c){ return c.v===color; });
+      if(known){ elColor.value=color; elColorCustom.disabled=(color!=='custom'); }
+      else { elColor.value='custom'; elColorCustom.disabled=false; elColorCustom.value=color; }
+    }
+    if(centerText!==undefined) elCenter.value=centerText;
+    if(currentUrl) renderQr(currentUrl); else checkQrStyle();
+    return { color: qrColor(), ecl: elEcl.value, eclLocked: elEcl.disabled,
+             colorMsg: $('msgColor').className, centerMsg: $('msgCenter').className };
+  },
+  getSvg: function(){ return currentQr ? QR.toSvg(currentQr, 4, 8, qrOptions()) : ''; }
 };
 })();
 </script>
