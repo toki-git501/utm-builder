@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>UTMパラメータ生成ツール</title>
+<style>
+/* =====================================================================
+   配色トークン
+   本ツールはライトモード専用。端末がダークモードでも表示は変わらない。
+   色の指定は必ずこのトークンを経由すること。
+   ===================================================================== */
+:root{
+  /* 面 */
+  --bg:#f1f5f3;
+  --surface:#ffffff;
+  --surface-2:#f8faf9;
+  --line:#d8e2de;
+  --line-strong:#b6c6c1;
+  /* 文字 */
+  --ink:#16211e;
+  --ink-muted:#5a6b66;
+  /* ブランド（深い青緑） */
+  --brand:#0e5f56;
+  --brand-dark:#0a4741;
+  --brand-soft:#2f8579;
+  --brand-wash:#e2eeeb;
+  --on-brand:#ffffff;
+  /* 操作色 */
+  --accent:#0f8f7e;
+  --accent-dark:#0b7264;
+  --on-accent:#ffffff;
+  /* ヘッダー */
+  --header-bg:#0e5f56;
+  --header-fg:#ffffff;
+  --header-line:transparent;
+  /* 状態 */
+  --err:#a8342a;   --err-bg:#fbecea;
+  --warn:#8a5a00;  --warn-bg:#fbf1de;
+  /* URL表示面 */
+  --code-bg:#0f1f1c; --code-fg:#a8e6d8; --code-key:#f0c674; --code-dim:#5d7671;
+  /* 形状・書体 */
+  --radius:8px;
+  --font:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic Medium","Yu Gothic","Meiryo",system-ui,-apple-system,sans-serif;
+  --mono:"SFMono-Regular",Consolas,"Roboto Mono","Osaka-Mono","MS Gothic",monospace;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--font);
+  background:var(--bg);
+  color:var(--ink);
+  line-height:1.7;
+  font-size:15px;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px 64px}
+h1,h2{text-wrap:balance}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{transition-duration:.01ms !important;animation-duration:.01ms !important}
+}
+
+/* ===== ヘッダー ================================================= */
+header{
+  background:var(--header-bg);
+  color:var(--header-fg);
+  padding:18px 0;
+  margin-bottom:22px;
+  border-bottom:1px solid var(--header-line);
+}
+header .wrap{padding-bottom:0}
+header h1{margin:0;font-size:19px;font-weight:700;letter-spacing:.02em}
+header .clinic{margin:4px 0 0;font-size:13px;opacity:.82}
+header .clinic:empty{display:none}
+.headbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.btn-ghost{
+  background:transparent;color:var(--header-fg);
+  border:1.5px solid currentColor;opacity:.85;
+  font-size:12.5px;padding:6px 13px;
+}
+.btn-ghost:hover{opacity:1;background:rgba(255,255,255,.12)}
+[hidden]{display:none !important}
+.codeval{opacity:.75}
+
+/* ===== レイアウト =============================================== */
+.cols{display:grid;grid-template-columns:1fr;gap:18px;align-items:start}
+@media(min-width:900px){
+  .cols{grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr)}
+  .col-right{position:sticky;top:16px}
+}
+.col-left,.col-right{display:flex;flex-direction:column;gap:18px;min-width:0}
+
+/* ===== カード =================================================== */
+.card{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:18px 18px 20px;
+}
+.card > h2{
+  margin:0 0 14px;font-size:15px;font-weight:700;color:var(--brand);
+  padding-bottom:9px;border-bottom:2px solid var(--brand);
+  display:flex;align-items:center;gap:8px;
+}
+.card > h2 .num{
+  background:var(--brand);color:var(--on-brand);
+  width:22px;height:22px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:12px;flex:none;font-variant-numeric:tabular-nums;
+}
+
+/* ===== プリセット =============================================== */
+.presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:8px}
+.preset{position:relative;min-width:0}
+.preset input{position:absolute;opacity:0;width:0;height:0}
+.preset label{
+  display:block;border:1.5px solid var(--line);border-radius:var(--radius);
+  padding:10px 12px;cursor:pointer;background:var(--surface-2);height:100%;
+  transition:border-color .12s, background .12s;
+}
+.preset label:hover{border-color:var(--brand-soft);background:var(--brand-wash)}
+.preset input:checked + label{
+  border-color:var(--brand);background:var(--brand-wash);
+  box-shadow:inset 0 0 0 1px var(--brand);
+}
+.preset input:focus-visible + label{outline:3px solid var(--accent);outline-offset:2px}
+.preset .pname{font-weight:700;font-size:13.5px;display:block;color:var(--ink)}
+.preset .pdesc{font-size:11.5px;color:var(--ink-muted);display:block;margin-top:2px;line-height:1.55}
+
+/* ===== フォーム ================================================= */
+.field{margin-bottom:15px}
+.field:last-child{margin-bottom:0}
+.field label.lb{display:block;font-weight:700;font-size:13px;margin-bottom:5px;color:var(--ink)}
+.req,.opt{
+  font-size:10px;padding:1px 6px;border-radius:3px;
+  margin-left:6px;vertical-align:1.5px;font-weight:700;
+}
+.req{background:var(--err);color:var(--surface)}
+.opt{background:var(--line);color:var(--ink-muted)}
+input[type=text],select{
+  width:100%;padding:9px 10px;
+  border:1.5px solid var(--line-strong);border-radius:6px;
+  font-size:14px;font-family:var(--mono);
+  background:var(--surface);color:var(--ink);
+}
+select{font-family:var(--font)}
+input[type=text]:focus,select:focus{
+  outline:none;border-color:var(--brand);
+  box-shadow:0 0 0 3px var(--brand-wash);
+}
+input.bad{border-color:var(--err);background:var(--err-bg)}
+.hint{font-size:11.5px;color:var(--ink-muted);margin-top:4px;line-height:1.6}
+.hint code,td code{
+  font-family:var(--mono);font-size:11px;
+  background:var(--surface-2);border:1px solid var(--line);
+  padding:0 4px;border-radius:3px;color:var(--ink);
+}
+.msg{font-size:12px;margin-top:5px;padding:6px 9px;border-radius:5px;display:none;line-height:1.6}
+.msg.err{display:block;background:var(--err-bg);color:var(--err);border-left:3px solid var(--err)}
+.msg.warn{display:block;background:var(--warn-bg);color:var(--warn);border-left:3px solid var(--warn)}
+.combo{display:flex;gap:8px;min-width:0}
+.combo select{flex:0 0 42%;min-width:0}
+.combo input{flex:1 1 auto;min-width:0}
+
+/* ===== アコーディオン =========================================== */
+details{border:1px solid var(--line);border-radius:6px;background:var(--surface-2)}
+details summary{
+  cursor:pointer;padding:9px 12px;font-weight:700;font-size:13px;
+  color:var(--brand);list-style:none;user-select:none;
+}
+details summary::-webkit-details-marker{display:none}
+details summary::before{
+  content:"\25B6";font-size:9px;margin-right:7px;display:inline-block;transition:transform .15s;
+}
+details[open] summary::before{transform:rotate(90deg)}
+details summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px;border-radius:6px}
+details .inner{padding:4px 12px 14px;border-top:1px solid var(--line)}
+
+/* ===== 生成結果 ================================================= */
+.result{
+  font-family:var(--mono);font-size:13px;
+  background:var(--code-bg);color:var(--code-fg);
+  padding:13px;border-radius:6px;word-break:break-all;min-height:56px;
+  white-space:pre-wrap;line-height:1.65;
+}
+.result.empty{color:var(--code-dim)}
+.result .k{color:var(--code-key)}
+.btnrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+button{
+  font-family:var(--font);font-size:13.5px;font-weight:700;
+  padding:9px 16px;border-radius:6px;border:1.5px solid transparent;
+  cursor:pointer;transition:background .12s,color .12s,border-color .12s;
+}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn-main{background:var(--accent);color:var(--on-accent)}
+.btn-main:hover:not(:disabled){background:var(--accent-dark)}
+.btn-sub{background:var(--surface);color:var(--brand);border-color:var(--brand)}
+.btn-sub:hover:not(:disabled){background:var(--brand-wash)}
+button:disabled{opacity:.4;cursor:not-allowed}
+
+/* ===== QRコード ================================================= */
+.qrbox{
+  text-align:center;padding:14px;
+  background:var(--surface);border:1px solid var(--line);border-radius:6px;
+}
+.qrbox svg{max-width:100%;height:auto;display:block;margin:0 auto}
+.qr-none{color:var(--ink-muted);font-size:13px;padding:44px 10px;line-height:1.8}
+.qropts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.qropts .field{margin:0;min-width:0}
+.qrmeta{
+  font-size:11.5px;color:var(--ink-muted);margin-top:9px;
+  text-align:center;line-height:1.6;font-variant-numeric:tabular-nums;
+}
+
+/* ===== 注意書き ================================================= */
+.alert{border-radius:6px;padding:11px 13px;font-size:12.5px;line-height:1.75}
+.alert.danger{background:var(--err-bg);border-left:4px solid var(--err);color:var(--err)}
+.alert.note{background:var(--brand-wash);border-left:4px solid var(--brand-soft);color:var(--ink)}
+.alert b{display:block;margin-bottom:3px}
+.alert ul{margin:5px 0 0;padding-left:19px}
+.alert li{margin:2px 0}
+.alert-top{margin-bottom:18px}
+
+/* ===== ヘルプ表 ================================================= */
+.scrollx{overflow-x:auto}
+table.help{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+table.help th,table.help td{
+  border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top;
+}
+table.help th{background:var(--surface-2);font-weight:700;white-space:nowrap;color:var(--ink)}
+
+/* ===== フッター ================================================= */
+footer{
+  border-top:1px solid var(--line);margin-top:10px;padding-top:14px;
+  font-size:11.5px;color:var(--ink-muted);line-height:1.8;
+}
+footer .privacy{font-weight:700;color:var(--brand)}
+.toast{
+  position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(14px);
+  background:var(--brand);color:var(--on-brand);
+  padding:10px 22px;border-radius:22px;font-size:13px;font-weight:700;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;
+  box-shadow:0 4px 16px rgba(0,0,0,.18);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap headbar">
+    <div>
+      <h1>UTMパラメータ生成ツール</h1>
+      <p class="clinic" id="clinicLabel"></p>
+    </div>
+    <button type="button" class="btn-ghost" id="btnSetting" hidden>設定を変更</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ===== 初回設定 ===== -->
+  <div class="card" id="setup" hidden>
+    <h2>最初に設定してください</h2>
+    <p class="hint" style="margin-bottom:16px">
+      お使いの医院の情報を1回だけ入力します。入力した内容は<b>このパソコンのブラウザの中だけに保存され、
+      外部のサーバーへは送信されません</b>。次回からこの画面は出ません。
+    </p>
+
+    <div class="field">
+      <label class="lb" for="cfgName">医院名<span class="req">必須</span></label>
+      <input type="text" id="cfgName" autocomplete="off" placeholder="〇〇歯科クリニック">
+      <p class="hint">画面の上部に表示されます。URLには使いません。</p>
+      <div class="msg" id="msgCfgName"></div>
+    </div>
+
+    <div class="field">
+      <label class="lb" for="cfgUrl">ホームページのURL<span class="req">必須</span></label>
+      <input type="text" id="cfgUrl" spellcheck="false" autocomplete="off" placeholder="https://example.com/">
+      <p class="hint">遷移先URLの初期値になります。トップページのURLを入れてください。</p>
+      <div class="msg" id="msgCfgUrl"></div>
+    </div>
+
+    <div class="field">
+      <label class="lb" for="cfgCode">医院の略称<span class="req">必須</span></label>
+      <input type="text" id="cfgCode" spellcheck="false" autocomplete="off" placeholder="example">
+      <p class="hint">
+        キャンペーン名の先頭に付きます。<b>半角小文字の英数字とハイフン</b>で短く付けてください。<br>
+        例：<code>example</code> と設定すると、キャンペーン名は <code>example_event_202609</code> の形になります。
+      </p>
+      <div class="msg" id="msgCfgCode"></div>
+    </div>
+
+    <div class="btnrow">
+      <button type="button" class="btn-main" id="btnSaveCfg">この内容で始める</button>
+      <button type="button" class="btn-sub" id="btnCancelCfg" hidden>キャンセル</button>
+    </div>
+    <div class="msg" id="msgCfg"></div>
+  </div>
+
+  <!-- ===== 本体 ===== -->
+  <div id="app" hidden>
+
+  <div class="alert danger alert-top">
+    <b>Google広告のリンク先URLには絶対に使わないでください</b>
+    Google広告は自動タグ設定（gclid）で流入元を記録します。そこへUTMを付けると自動タグ設定の値が優先され、
+    手動で付けたUTMは意図どおりに反映されません。広告の効果測定はGoogle広告とGA4の連携で行ってください。
+  </div>
+
+  <div class="cols">
+
+    <!-- ============ 左カラム：入力 ============ -->
+    <div class="col-left">
+
+      <div class="card">
+        <h2><span class="num">1</span>用途を選ぶ</h2>
+        <div class="presets" id="presets"></div>
+        <p class="hint" id="presetHint">用途を選ぶと、参照元・メディア・キャンペーン名が自動で入ります。</p>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">2</span>必須項目</h2>
+
+        <div class="field">
+          <label class="lb" for="baseUrl">遷移先URL<span class="req">必須</span></label>
+          <input type="text" id="baseUrl" spellcheck="false"
+                 autocomplete="off" placeholder="https://example.com/">
+          <p class="hint">計測したいページのURL。トップページ以外を指定する場合はそのページのURLに変更してください。</p>
+          <div class="msg" id="msgUrl"></div>
+        </div>
+
+        <div class="field">
+          <label class="lb" for="srcSel">utm_source（参照元）<span class="req">必須</span></label>
+          <div class="combo">
+            <select id="srcSel"></select>
+            <input type="text" id="source" spellcheck="false" autocomplete="off" placeholder="例: gbp">
+          </div>
+          <p class="hint">どこから来たか。<b>全医院で表記を統一する固定値</b>です。原則プルダウンから選んでください。</p>
+          <div class="msg" id="msgSrc"></div>
+
+          <div style="margin-top:10px">
+            <label class="lb" for="sourceSub">個別の名前を付ける<span class="opt">任意</span></label>
+            <input type="text" id="sourceSub" spellcheck="false" autocomplete="off"
+                   placeholder="mannaka-fes">
+            <p class="hint">
+              同じ参照元の中で施策を分けたいときに入力します。
+              例：<code>event</code> ＋ <code>mannaka-fes</code> → <code>event-mannaka-fes</code><br>
+              <b>単語の区切りはハイフン（-）を使ってください。</b>アンダースコアを入れた場合はハイフンに変換します。<br>
+              <b>ローマ字（半角小文字）で入力してください。</b>「まんなかフェス」なら <code>mannaka-fes</code> です。
+            </p>
+            <div class="msg" id="msgSub"></div>
+            <p class="hint" id="srcPreview" style="display:none"></p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="lb" for="medSel">utm_medium（メディア）<span class="req">必須</span></label>
+          <div class="combo">
+            <select id="medSel"></select>
+            <input type="text" id="medium" spellcheck="false" autocomplete="off" placeholder="例: organic">
+          </div>
+          <p class="hint">GA4のチャネル分類に使われます。<b>独自の値を入れるとGA4で「Unassigned」に分類されます。</b></p>
+          <div class="msg" id="msgMed"></div>
+        </div>
+
+        <div class="field">
+          <label class="lb" for="campaign">utm_campaign（キャンペーン名）<span class="req">必須</span></label>
+          <input type="text" id="campaign" spellcheck="false" autocomplete="off"
+                 placeholder="example_event_202609">
+          <p class="hint">形式：<code><span class="codeval">医院略称</span>_施策名_年月</code>　継続設置で差し替えない場合は年月の代わりに <code>permanent</code>。</p>
+          <div class="msg" id="msgCmp"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">3</span>任意項目</h2>
+        <details>
+          <summary>設置場所や配布物で分けたいときに開く（utm_content ほか）</summary>
+          <div class="inner">
+            <div class="field">
+              <label class="lb" for="content">utm_content<span class="opt">任意</span></label>
+              <input type="text" id="content" spellcheck="false" autocomplete="off"
+                     placeholder="waiting-room">
+              <p class="hint">同じ施策の中で設置場所や配布物を分ける識別子。例：<code>waiting-room</code> <code>reception</code> <code>poster-a</code></p>
+              <div class="msg" id="msgCnt"></div>
+            </div>
+            <div class="field">
+              <label class="lb" for="utmid">utm_id<span class="opt">任意</span></label>
+              <input type="text" id="utmid" spellcheck="false" autocomplete="off" placeholder="通常は空欄">
+              <p class="hint">施策を一意のIDで管理する場合のみ入力します。通常は空欄で構いません。</p>
+              <div class="msg" id="msgId"></div>
+            </div>
+            <div class="field">
+              <label class="lb" for="term">utm_term<span class="opt">任意</span></label>
+              <input type="text" id="term" spellcheck="false" autocomplete="off" placeholder="通常は空欄">
+              <p class="hint">検索キーワードの識別用。本ツールの用途ではほぼ使いません。</p>
+              <div class="msg" id="msgTrm"></div>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card">
+        <h2>命名のルール</h2>
+        <details>
+          <summary>使ってよい文字・禁止事項を確認する</summary>
+          <div class="inner">
+            <p class="hint" style="margin-top:10px">
+              <b>使える文字：</b>半角小文字の英数字・ハイフン（-）・アンダースコア（_）だけです。<br>
+              全角文字・日本語・スペース・大文字は入力すると自動で変換されます。
+            </p>
+            <p class="hint">
+              <b>ハイフンとアンダースコアの使い分け：</b><br>
+              単語の区切りは<b>ハイフン（-）</b>　例：<code>mannaka-fes</code> <code>waiting-room</code><br>
+              キャンペーン名の意味のまとまりの区切りは<b>アンダースコア（_）</b>　例：<code>example_event-mannaka-fes_202609</code>
+            </p>
+            <div class="scrollx">
+            <table class="help">
+              <tr><th>やってはいけないこと</th><th>理由</th></tr>
+              <tr><td>自院サイト内のリンクにUTMを付ける</td><td>そこで新しいセッションが始まり、訪問数が水増しされる。流入元も上書きされる</td></tr>
+              <tr><td>Google広告のリンク先に付ける</td><td>自動タグ設定（gclid）が優先され、手動のUTMは反映されない</td></tr>
+              <tr><td>3つの必須項目のどれかを空にする</td><td>GA4上で参照元やメディアが <code>(not set)</code> になる</td></tr>
+              <tr><td>発行済みURLの名前を後から変える</td><td>GA4で別の行に分裂し、前月との比較ができなくなる</td></tr>
+              <tr><td>患者名など個人情報を入れる</td><td>URLはGA4に平文で記録され、閲覧権限のある全員に見える</td></tr>
+            </table>
+            </div>
+          </div>
+        </details>
+      </div>
+
+    </div>
+
+    <!-- ============ 右カラム：結果 ============ -->
+    <div class="col-right">
+
+      <div class="card">
+        <h2><span class="num">4</span>生成されたURL</h2>
+        <div class="result empty" id="result">必須項目を入力すると、ここにURLが表示されます。</div>
+        <div class="btnrow">
+          <button type="button" class="btn-main" id="btnCopy" disabled>URLをコピー</button>
+          <button type="button" class="btn-sub" id="btnReset">入力をクリア</button>
+        </div>
+        <div class="msg" id="msgAll"></div>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">5</span>QRコード</h2>
+        <div class="qrbox" id="qrbox"><div class="qr-none">URLが確定すると<br>QRコードが表示されます</div></div>
+        <div class="qropts">
+          <div class="field">
+            <label class="lb" for="qrEcl">誤り訂正レベル</label>
+            <select id="qrEcl">
+              <option value="L">L（最小・7%）</option>
+              <option value="M" selected>M（標準・15%）</option>
+              <option value="Q">Q（高・25%）</option>
+              <option value="H">H（最高・30%）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="lb" for="qrSize">PNGの大きさ</label>
+            <select id="qrSize">
+              <option value="512">小（約500px）</option>
+              <option value="1024" selected>中（約1000px）</option>
+              <option value="2048">大（約2000px・印刷向け）</option>
+            </select>
+          </div>
+        </div>
+        <div class="qrmeta" id="qrmeta"></div>
+        <div class="btnrow">
+          <button type="button" class="btn-main" id="btnPng" disabled>PNGで保存</button>
+          <button type="button" class="btn-sub" id="btnSvg" disabled>SVGで保存</button>
+        </div>
+        <div class="alert note" style="margin:14px 0 0">
+          <b>印刷するときの注意</b>
+          <ul>
+            <li>チラシ内なら一辺20mm以上、屋外掲示なら読み取る距離の10分の1以上の大きさを確保してください。</li>
+            <li>QRの周囲には白い余白を残してください。文字や写真を寄せると読み取れなくなります。</li>
+            <li>ロゴを重ねる場合は誤り訂正レベルを Q または H にしてください。</li>
+            <li><b>印刷後に必ずスマートフォン実機で読み取り確認をしてください。</b></li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  </div><!-- /#app -->
+
+  <footer>
+    <p class="privacy">入力した内容はこのブラウザの中だけで処理されます。外部のサーバーへは一切送信されません。</p>
+    <p>
+      <b>ご利用にあたって</b><br>
+      このツールで作ったURLやQRコードを使った結果、計測がうまくいかなかった、リンクが開かなかった、
+      そのために損失が出たといった場合でも、製作者は責任を負いかねます。
+      公開する前・印刷する前には、必ずご自身でリンクが正しく開くかを確認してください。
+      なお、GoogleアナリティクスやGoogleビジネスプロフィールの仕様は予告なく変わることがあります。
+    </p>
+    <p>
+      UTMパラメータ生成ツール　製作：標 譲二<br>
+      QRコード生成機能は外部ライブラリを使わず本ファイル内に実装しています。QRコードはデンソーウェーブの登録商標です。
+    </p>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ==========================================================================
+   QRコード生成エンジン（外部ライブラリ不使用・自前実装）
+   バイトモード / 誤り訂正レベル L・M・Q・H / バージョン1〜40 自動選択
+   ========================================================================== */
+var QR = (function () {
+  'use strict';
+
+  // 誤り訂正レベルごとの、1ブロックあたりの誤り訂正コード語数（添字はバージョン1〜40）
+  var ECC_PER_BLOCK = {
+    L: [-1, 7,10,15,20,26,18,20,24,30,18,20,24,26,30,22,24,28,30,28,28,28,28,30,30,26,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30],
+    M: [-1,10,16,26,18,24,16,18,22,22,26,30,22,22,24,24,28,28,26,26,26,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28],
+    Q: [-1,13,22,18,26,18,24,18,22,20,24,28,26,24,20,30,24,28,28,26,30,28,30,30,30,30,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30],
+    H: [-1,17,28,22,16,22,28,26,26,24,28,24,28,22,24,24,30,28,28,26,28,30,24,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30]
+  };
+
+  // 誤り訂正レベルごとの誤り訂正ブロック数（添字はバージョン1〜40）
+  var NUM_BLOCKS = {
+    L: [-1,1,1,1,1,1,2,2,2,2,4,4,4,4,4,6,6,6,6,7,8,8,9,9,10,12,12,12,13,14,15,16,17,18,19,19,20,21,22,24,25],
+    M: [-1,1,1,1,2,2,4,4,4,5,5,5,8,9,9,10,10,11,13,14,16,17,17,18,20,21,23,25,26,28,29,31,33,35,37,38,40,43,45,47,49],
+    Q: [-1,1,1,2,2,4,4,6,6,8,8,8,10,12,16,12,17,16,18,21,20,23,23,25,27,29,34,34,35,38,40,43,45,48,51,53,56,59,62,65,68],
+    H: [-1,1,1,2,4,4,4,5,6,8,8,11,11,16,16,18,16,19,21,25,25,25,34,30,32,35,37,40,42,45,48,51,54,57,60,63,66,70,74,77,81]
+  };
+
+  // 形式情報に埋め込む誤り訂正レベルのビット値
+  var ECL_BITS = { L: 1, M: 0, Q: 3, H: 2 };
+
+  // マスク評価のペナルティ係数（JIS X 0510 規定値）
+  var PENALTY_N1 = 3, PENALTY_N2 = 3, PENALTY_N3 = 40, PENALTY_N4 = 10;
+
+  // --- 基本計算 ----------------------------------------------------------
+
+  // 機能パターンを除いた、そのバージョンで使えるモジュール数
+  function rawDataModules(ver) {
+    var result = (16 * ver + 128) * ver + 64;
+    if (ver >= 2) {
+      var numAlign = Math.floor(ver / 7) + 2;
+      result -= (25 * numAlign - 10) * numAlign - 55;
+      if (ver >= 7) result -= 36;
+    }
+    return result;
+  }
+
+  // そのバージョン・誤り訂正レベルで格納できるデータコード語数
+  function dataCodewords(ver, ecl) {
+    return Math.floor(rawDataModules(ver) / 8)
+      - ECC_PER_BLOCK[ecl][ver] * NUM_BLOCKS[ecl][ver];
+  }
+
+  // 位置合わせパターンの中心座標
+  function alignPositions(ver) {
+    if (ver === 1) return [];
+    var numAlign = Math.floor(ver / 7) + 2;
+    var step = (ver === 32) ? 26 : Math.ceil((ver * 4 + 4) / (numAlign * 2 - 2)) * 2;
+    var result = [6];
+    for (var pos = ver * 4 + 10; result.length < numAlign; pos -= step) result.splice(1, 0, pos);
+    return result;
+  }
+
+  // --- ガロア体 GF(256) 演算 ---------------------------------------------
+
+  function gfMultiply(x, y) {
+    var z = 0;
+    for (var i = 7; i >= 0; i--) {
+      z = (z << 1) ^ ((z >>> 7) * 0x11D);
+      z ^= ((y >>> i) & 1) * x;
+    }
+    return z & 0xFF;
+  }
+
+  // 誤り訂正計算に使う生成多項式
+  function rsDivisor(degree) {
+    var result = [];
+    for (var i = 0; i < degree - 1; i++) result.push(0);
+    result.push(1);
+    var root = 1;
+    for (var i2 = 0; i2 < degree; i2++) {
+      for (var j = 0; j < result.length; j++) {
+        result[j] = gfMultiply(result[j], root);
+        if (j + 1 < result.length) result[j] ^= result[j + 1];
+      }
+      root = gfMultiply(root, 0x02);
+    }
+    return result;
+  }
+
+  // 誤り訂正コード語を算出
+  function rsRemainder(data, divisor) {
+    var result = divisor.map(function () { return 0; });
+    data.forEach(function (b) {
+      var factor = b ^ result.shift();
+      result.push(0);
+      divisor.forEach(function (d, i) { result[i] ^= gfMultiply(d, factor); });
+    });
+    return result;
+  }
+
+  // --- 文字列 → データコード語 -------------------------------------------
+
+  // 文字列をUTF-8バイト列に変換（日本語が混ざっても壊れないようにする）
+  function toUtf8Bytes(str) {
+    var out = [], i, c;
+    var enc = encodeURIComponent(str);
+    for (i = 0; i < enc.length; i++) {
+      c = enc.charAt(i);
+      if (c === '%') {
+        out.push(parseInt(enc.substr(i + 1, 2), 16));
+        i += 2;
+      } else {
+        out.push(c.charCodeAt(0));
+      }
+    }
+    return out;
+  }
+
+  function appendBits(bitArr, val, len) {
+    for (var i = len - 1; i >= 0; i--) bitArr.push((val >>> i) & 1);
+  }
+
+  // データをコード語列に整形（モード指示子・文字数指示子・埋め草を付与）
+  function buildCodewords(bytes, ver, ecl) {
+    var capacityBits = dataCodewords(ver, ecl) * 8;
+    var bits = [];
+    appendBits(bits, 4, 4);                              // バイトモード
+    appendBits(bits, bytes.length, ver <= 9 ? 8 : 16);   // 文字数指示子
+    bytes.forEach(function (b) { appendBits(bits, b, 8); });
+    if (bits.length > capacityBits) return null;
+
+    // 終端パターン
+    appendBits(bits, 0, Math.min(4, capacityBits - bits.length));
+    // バイト境界まで0埋め
+    appendBits(bits, 0, (8 - bits.length % 8) % 8);
+    // 埋め草コード語を交互に追加
+    for (var pad = 0xEC; bits.length < capacityBits; pad ^= 0xEC ^ 0x11) appendBits(bits, pad, 8);
+
+    var cw = [];
+    for (var i = 0; i < bits.length; i += 8) {
+      var v = 0;
+      for (var j = 0; j < 8; j++) v = (v << 1) | bits[i + j];
+      cw.push(v);
+    }
+    return cw;
+  }
+
+  // ブロック分割・誤り訂正付加・インターリーブ
+  function addEccAndInterleave(data, ver, ecl) {
+    var numBlocks = NUM_BLOCKS[ecl][ver];
+    var eccLen = ECC_PER_BLOCK[ecl][ver];
+    var rawCw = Math.floor(rawDataModules(ver) / 8);
+    var numShort = numBlocks - rawCw % numBlocks;
+    var shortLen = Math.floor(rawCw / numBlocks);
+
+    var blocks = [];
+    var divisor = rsDivisor(eccLen);
+    for (var i = 0, k = 0; i < numBlocks; i++) {
+      var len = shortLen - eccLen + (i < numShort ? 0 : 1);
+      var dat = data.slice(k, k + len);
+      k += len;
+      var ecc = rsRemainder(dat, divisor);
+      // 全ブロックの長さを揃えるため、短いブロックには詰め物を1つ入れる
+      // （この詰め物はインターリーブ時に読み飛ばすので出力には現れない）
+      if (i < numShort) dat.push(0);
+      blocks.push(dat.concat(ecc));
+    }
+
+    var result = [];
+    for (var col = 0; col < blocks[0].length; col++) {
+      for (var b = 0; b < blocks.length; b++) {
+        // 短いブロックの詰め物の位置は読み飛ばす
+        if (col !== shortLen - eccLen || b >= numShort) result.push(blocks[b][col]);
+      }
+    }
+    return result;
+  }
+
+  // --- シンボル描画 -------------------------------------------------------
+
+  function makeSymbol(ver, ecl, codewords, forcedMask) {
+    var size = ver * 4 + 17;
+    var modules = [], isFunc = [];
+    for (var i = 0; i < size; i++) {
+      modules.push(new Array(size).fill(false));
+      isFunc.push(new Array(size).fill(false));
+    }
+
+    function setFunc(x, y, dark) {
+      if (x < 0 || y < 0 || x >= size || y >= size) return;
+      modules[y][x] = dark;
+      isFunc[y][x] = true;
+    }
+
+    // 位置検出パターン（3隅）
+    function drawFinder(cx, cy) {
+      for (var dy = -4; dy <= 4; dy++) {
+        for (var dx = -4; dx <= 4; dx++) {
+          var dist = Math.max(Math.abs(dx), Math.abs(dy));
+          setFunc(cx + dx, cy + dy, dist !== 2 && dist !== 4);
+        }
+      }
+    }
+
+    // タイミングパターン
+    for (var i2 = 0; i2 < size; i2++) {
+      setFunc(6, i2, i2 % 2 === 0);
+      setFunc(i2, 6, i2 % 2 === 0);
+    }
+    drawFinder(3, 3);
+    drawFinder(size - 4, 3);
+    drawFinder(3, size - 4);
+
+    // 位置合わせパターン
+    var align = alignPositions(ver);
+    for (var a = 0; a < align.length; a++) {
+      for (var b2 = 0; b2 < align.length; b2++) {
+        // 位置検出パターンと重なる3隅は除外
+        if ((a === 0 && b2 === 0) || (a === 0 && b2 === align.length - 1) ||
+            (a === align.length - 1 && b2 === 0)) continue;
+        for (var dy2 = -2; dy2 <= 2; dy2++) {
+          for (var dx2 = -2; dx2 <= 2; dx2++) {
+            setFunc(align[b2] + dx2, align[a] + dy2,
+              Math.max(Math.abs(dx2), Math.abs(dy2)) !== 1);
+          }
+        }
+      }
+    }
+
+    // 形式情報（マスク番号確定後に確定値を書き込む）
+    function drawFormat(mask) {
+      var data = ECL_BITS[ecl] << 3 | mask;
+      var rem = data;
+      for (var k = 0; k < 10; k++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+      var bits = ((data << 10) | rem) ^ 0x5412;
+      function bit(n) { return ((bits >>> n) & 1) !== 0; }
+      for (var i3 = 0; i3 <= 5; i3++) setFunc(8, i3, bit(i3));
+      setFunc(8, 7, bit(6));
+      setFunc(8, 8, bit(7));
+      setFunc(7, 8, bit(8));
+      for (var i4 = 9; i4 < 15; i4++) setFunc(14 - i4, 8, bit(i4));
+      for (var i5 = 0; i5 < 8; i5++) setFunc(size - 1 - i5, 8, bit(i5));
+      for (var i6 = 8; i6 < 15; i6++) setFunc(8, size - 15 + i6, bit(i6));
+      setFunc(8, size - 8, true); // 常に暗モジュール
+    }
+
+    // 型番情報（バージョン7以上）
+    if (ver >= 7) {
+      var rem2 = ver;
+      for (var k2 = 0; k2 < 12; k2++) rem2 = (rem2 << 1) ^ ((rem2 >>> 11) * 0x1F25);
+      var vbits = ver << 12 | rem2;
+      for (var i7 = 0; i7 < 18; i7++) {
+        var bt = ((vbits >>> i7) & 1) !== 0;
+        var aa = size - 11 + i7 % 3, bb = Math.floor(i7 / 3);
+        setFunc(aa, bb, bt);
+        setFunc(bb, aa, bt);
+      }
+    }
+
+    drawFormat(0); // 仮置き（機能領域を確保するため）
+
+    // データコード語をジグザグに配置
+    var idx = 0;
+    for (var right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5; // 縦のタイミングパターン列を飛ばす
+      for (var vert = 0; vert < size; vert++) {
+        for (var j2 = 0; j2 < 2; j2++) {
+          var x = right - j2;
+          var upward = ((right + 1) & 2) === 0;
+          var y = upward ? size - 1 - vert : vert;
+          if (!isFunc[y][x] && idx < codewords.length * 8) {
+            modules[y][x] = ((codewords[idx >>> 3] >>> (7 - (idx & 7))) & 1) !== 0;
+            idx++;
+          }
+        }
+      }
+    }
+
+    // マスク適用
+    function applyMask(mask) {
+      for (var y = 0; y < size; y++) {
+        for (var x = 0; x < size; x++) {
+          if (isFunc[y][x]) continue;
+          var invert;
+          switch (mask) {
+            case 0: invert = (x + y) % 2 === 0; break;
+            case 1: invert = y % 2 === 0; break;
+            case 2: invert = x % 3 === 0; break;
+            case 3: invert = (x + y) % 3 === 0; break;
+            case 4: invert = (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0; break;
+            case 5: invert = x * y % 2 + x * y % 3 === 0; break;
+            case 6: invert = (x * y % 2 + x * y % 3) % 2 === 0; break;
+            case 7: invert = ((x + y) % 2 + x * y % 3) % 2 === 0; break;
+          }
+          if (invert) modules[y][x] = !modules[y][x];
+        }
+      }
+    }
+
+    // マスクの良し悪しを採点（低いほど良い）
+    function penalty() {
+      var score = 0, x, y, i, run, color;
+
+      // 同色の連続（行）
+      for (y = 0; y < size; y++) {
+        color = modules[y][0]; run = 1;
+        for (x = 1; x < size; x++) {
+          if (modules[y][x] === color) {
+            run++;
+            if (run === 5) score += PENALTY_N1;
+            else if (run > 5) score++;
+          } else { color = modules[y][x]; run = 1; }
+        }
+      }
+      // 同色の連続（列）
+      for (x = 0; x < size; x++) {
+        color = modules[0][x]; run = 1;
+        for (y = 1; y < size; y++) {
+          if (modules[y][x] === color) {
+            run++;
+            if (run === 5) score += PENALTY_N1;
+            else if (run > 5) score++;
+          } else { color = modules[y][x]; run = 1; }
+        }
+      }
+      // 2×2の同色ブロック
+      for (y = 0; y < size - 1; y++) {
+        for (x = 0; x < size - 1; x++) {
+          var c = modules[y][x];
+          if (c === modules[y][x + 1] && c === modules[y + 1][x] && c === modules[y + 1][x + 1]) {
+            score += PENALTY_N2;
+          }
+        }
+      }
+      // 位置検出パターンに似た並び（1:1:3:1:1）
+      var pat = [true, false, true, true, true, false, true];
+      function matchAt(get, len, start) {
+        for (i = 0; i < 7; i++) if (get(start + i) !== pat[i]) return false;
+        var before = true, after = true;
+        for (i = 1; i <= 4; i++) {
+          if (start - i >= 0 && get(start - i)) before = false;
+          if (start + 6 + i < len && get(start + 6 + i)) after = false;
+        }
+        return before || after;
+      }
+      for (y = 0; y < size; y++) {
+        for (x = 0; x + 7 <= size; x++) {
+          if (matchAt(function (k) { return modules[y][k]; }, size, x)) score += PENALTY_N3;
+        }
+      }
+      for (x = 0; x < size; x++) {
+        for (y = 0; y + 7 <= size; y++) {
+          if (matchAt(function (k) { return modules[k][x]; }, size, y)) score += PENALTY_N3;
+        }
+      }
+      // 明暗の偏り
+      var dark = 0;
+      for (y = 0; y < size; y++) for (x = 0; x < size; x++) if (modules[y][x]) dark++;
+      var total = size * size;
+      var k3 = Math.ceil(Math.abs(dark * 20 - total * 10) / total) - 1;
+      score += k3 * PENALTY_N4;
+      return score;
+    }
+
+    // 最良のマスクを選ぶ
+    var bestMask = forcedMask;
+    if (bestMask === undefined || bestMask === null) {
+      var minScore = Infinity;
+      for (var m = 0; m < 8; m++) {
+        applyMask(m);
+        drawFormat(m);
+        var p = penalty();
+        if (p < minScore) { minScore = p; bestMask = m; }
+        applyMask(m); // 元に戻す
+      }
+    }
+    applyMask(bestMask);
+    drawFormat(bestMask);
+
+    return { size: size, modules: modules, version: ver, ecl: ecl, mask: bestMask };
+  }
+
+  // --- 公開関数 -----------------------------------------------------------
+
+  /**
+   * 文字列からQRコードを生成する
+   * @param {string} text  エンコードする文字列
+   * @param {string} ecl   誤り訂正レベル 'L' | 'M' | 'Q' | 'H'
+   * @returns {{size:number, modules:boolean[][], version:number, ecl:string, mask:number}}
+   */
+  function encode(text, ecl) {
+    ecl = ecl || 'M';
+    if (!ECC_PER_BLOCK[ecl]) throw new Error('誤り訂正レベルが不正です: ' + ecl);
+    var bytes = toUtf8Bytes(text);
+    for (var ver = 1; ver <= 40; ver++) {
+      var cw = buildCodewords(bytes, ver, ecl);
+      if (cw) {
+        return makeSymbol(ver, ecl, addEccAndInterleave(cw, ver, ecl), null);
+      }
+    }
+    throw new Error('データが長すぎてQRコードに収まりません');
+  }
+
+  /**
+   * QRコードをSVG文字列に変換する
+   * @param {object} qr      encode() の戻り値
+   * @param {number} margin  余白（モジュール数。規格上4以上）
+   * @param {number} px      1モジュールあたりのピクセル数
+   */
+  function toSvg(qr, margin, px) {
+    margin = (margin === undefined) ? 4 : margin;
+    px = px || 8;
+    var dim = qr.size + margin * 2;
+    var path = [];
+    for (var y = 0; y < qr.size; y++) {
+      for (var x = 0; x < qr.size; x++) {
+        if (qr.modules[y][x]) path.push('M' + (x + margin) + ',' + (y + margin) + 'h1v1h-1z');
+      }
+    }
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + dim + ' ' + dim + '" ' +
+      'width="' + dim * px + '" height="' + dim * px + '" shape-rendering="crispEdges">' +
+      '<rect width="' + dim + '" height="' + dim + '" fill="#ffffff"/>' +
+      '<path d="' + path.join('') + '" fill="#000000"/></svg>';
+  }
+
+  /**
+   * QRコードをcanvasに描画する
+   */
+  function toCanvas(qr, canvas, sizePx, margin) {
+    margin = (margin === undefined) ? 4 : margin;
+    var dim = qr.size + margin * 2;
+    var scale = Math.max(1, Math.floor(sizePx / dim));
+    var actual = dim * scale;
+    canvas.width = actual;
+    canvas.height = actual;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, actual, actual);
+    ctx.fillStyle = '#000000';
+    for (var y = 0; y < qr.size; y++) {
+      for (var x = 0; x < qr.size; x++) {
+        if (qr.modules[y][x]) {
+          ctx.fillRect((x + margin) * scale, (y + margin) * scale, scale, scale);
+        }
+      }
+    }
+    return canvas;
+  }
+
+  return { encode: encode, toSvg: toSvg, toCanvas: toCanvas };
+})();
+
+
+</script>
+
+<script>
+(function(){
+'use strict';
+
+/* =====================================================================
+   医院の設定
+   このファイル自体には医院の情報を一切持たせない。
+   利用者が初回に入力した内容を、そのパソコンのブラウザにだけ保存する。
+   （サーバーへは送信しないため、ファイルやURLが第三者に渡っても
+     どの医院のものかは分からない）
+   ===================================================================== */
+var STORE_KEY = 'utm-builder.clinic.v1';
+
+var CLINIC = { name:'', code:'', defaultUrl:'', host:'' };
+var storageAvailable = true;   // ブラウザの保存領域が使えるか
+var configured = false;        // 設定済みか
+
+function loadConfig(){
+  try{
+    var raw = window.localStorage.getItem(STORE_KEY);
+    if(!raw) return null;
+    var o = JSON.parse(raw);
+    if(o && o.code && o.defaultUrl && o.host) return o;
+    return null;
+  }catch(e){
+    // プライベートウィンドウなど、保存領域が使えない環境
+    storageAvailable = false;
+    return null;
+  }
+}
+
+function saveConfig(o){
+  try{
+    window.localStorage.setItem(STORE_KEY, JSON.stringify(o));
+    return true;
+  }catch(e){
+    storageAvailable = false;
+    return false;
+  }
+}
+
+/* 用途プリセット
+   source と medium は固定値。campaign は雛形（{med}=医院略称 {ym}=今月） */
+var PRESETS = [
+  { id:'gbp-website', name:'GBP ウェブサイト',   desc:'Googleビジネスプロフィールの「ウェブサイト」ボタン',
+    source:'gbp',          medium:'organic',  campaign:'{med}_gbp_permanent',       content:'' },
+  { id:'gbp-post',    name:'GBP 投稿・クーポン', desc:'ビジネスプロフィールの投稿やイベント内のリンク',
+    source:'gbp',          medium:'organic',  campaign:'{med}_gbp-post_{ym}',       content:'' },
+  { id:'qr-clinic',   name:'QR 院内掲示物',      desc:'待合室のポスター・卓上POPなど',
+    source:'poster-clinic',medium:'referral', campaign:'{med}_qr-clinic_{ym}',      content:'waiting-room' },
+  { id:'qr-event',    name:'QR イベント・展示',  desc:'イベント出展・セミナー・健診フェア',
+    source:'event',        medium:'referral', campaign:'{med}_event_{ym}',          content:'' },
+  { id:'qr-flyer',    name:'QR チラシ・紙媒体',  desc:'折込チラシ・ポスティング・DM',
+    source:'flyer',        medium:'referral', campaign:'{med}_flyer_{ym}',          content:'' },
+  { id:'qr-card',     name:'QR 診察券・名刺',    desc:'診察券・名刺・封筒など継続利用するもの',
+    source:'print-card',   medium:'referral', campaign:'{med}_card_permanent',      content:'patient-card' },
+  { id:'sns-ig',      name:'Instagram',          desc:'プロフィール欄のリンク',
+    source:'instagram',    medium:'social',   campaign:'{med}_ig-profile_permanent',content:'' },
+  { id:'sns-line',    name:'LINE公式',           desc:'LINE公式アカウントのメッセージ・リッチメニュー',
+    source:'line',         medium:'social',   campaign:'{med}_line_{ym}',           content:'' },
+  { id:'manual',      name:'その他（手入力）',   desc:'上記に当てはまらない場合',
+    source:'',             medium:'',         campaign:'',                          content:'' }
+];
+
+/* プルダウンの選択肢（マスタ） */
+var SOURCE_MASTER = ['gbp','poster-clinic','event','flyer','print-card','instagram','line','youtube','newsletter'];
+var MEDIUM_MASTER = [
+  { v:'organic',  label:'organic（自然検索として集計）' },
+  { v:'referral', label:'referral（他媒体からの参照）' },
+  { v:'social',   label:'social（SNS）' },
+  { v:'email',    label:'email（メール）' }
+];
+
+/* GA4のデフォルトチャネルグループに載る代表的なメディア値
+   これ以外を使うと Unassigned になりうるため警告する */
+var SAFE_MEDIUM = ['organic','referral','social','email','affiliate','cpc','ppc','display','paid_social','audio','sms','push'];
+
+/* =====================================================================
+   要素の取得
+   ===================================================================== */
+function $(id){ return document.getElementById(id); }
+var elBase=$('baseUrl'), elSrc=$('source'), elSub=$('sourceSub'),
+    elMed=$('medium'), elCmp=$('campaign'),
+    elCnt=$('content'), elId=$('utmid'), elTrm=$('term'),
+    elSrcSel=$('srcSel'), elMedSel=$('medSel'), elSrcPrev=$('srcPreview'),
+    elResult=$('result'), elQrBox=$('qrbox'), elQrMeta=$('qrmeta'),
+    elEcl=$('qrEcl'), elSize=$('qrSize'),
+    btnCopy=$('btnCopy'), btnPng=$('btnPng'), btnSvg=$('btnSvg'), btnReset=$('btnReset');
+
+var currentUrl = '';    // 生成済みURL
+var currentQr  = null;  // 生成済みQRコード
+var curPreset  = null;  // 選択中のプリセット
+var autoCampaign = '';  // 自動で入れたキャンペーン名（手動編集の検出に使う）
+
+/* =====================================================================
+   入力値の正規化
+   ===================================================================== */
+function normalize(str){
+  if(!str) return '';
+  return String(str)
+    // 全角英数字・全角記号を半角へ
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(c){ return String.fromCharCode(c.charCodeAt(0)-0xFEE0); })
+    .replace(/[－ー―‐]/g,'-')
+    .replace(/＿/g,'_')
+    .replace(/　/g,' ')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g,'-')     // スペースはハイフンに
+    .replace(/-{2,}/g,'-')   // ハイフンの連続を圧縮
+    .replace(/_{2,}/g,'_');
+}
+
+var VALID = /^[a-z0-9_-]+$/;
+// ひらがな・カタカナ・漢字が残っているか（残っていれば専用の案内を出す）
+var HAS_JP = /[぀-ヿ㐀-鿿ｦ-ﾟ]/;
+
+/* 個別の名前は単語の区切りをハイフンに統一する
+   （utm_source を「先頭が一致」で集計するとき、区切り文字が混ざると拾いにくいため） */
+function normalizeSub(str){
+  return normalize(str).replace(/_/g,'-').replace(/-{2,}/g,'-').replace(/^-|-$/g,'');
+}
+
+/* utm_source は「基本値」と「個別の名前」をハイフンでつなぐ
+   例）event ＋ mannaka-fes → event-mannaka-fes */
+function composeSource(base, sub){
+  if(!base) return '';
+  return sub ? base + '-' + sub : base;
+}
+
+function thisYearMonth(){
+  var d = new Date();
+  return String(d.getFullYear()) + ('0'+(d.getMonth()+1)).slice(-2);
+}
+
+function fillTemplate(tpl){
+  return tpl.replace(/\{med\}/g, CLINIC.code).replace(/\{ym\}/g, thisYearMonth());
+}
+
+/* =====================================================================
+   メッセージ表示
+   ===================================================================== */
+function setMsg(id, text, type){
+  var el = $(id);
+  if(!text){ el.className='msg'; el.textContent=''; return; }
+  el.className = 'msg ' + (type||'err');
+  el.textContent = text;
+}
+function mark(el, bad){ el.classList.toggle('bad', !!bad); }
+
+/* =====================================================================
+   画面の組み立て
+   ===================================================================== */
+function buildPresets(){
+  var box = $('presets');
+  PRESETS.forEach(function(p){
+    var d = document.createElement('div');
+    d.className = 'preset';
+    var input = document.createElement('input');
+    input.type='radio'; input.name='preset'; input.id='p_'+p.id; input.value=p.id;
+    var label = document.createElement('label');
+    label.setAttribute('for','p_'+p.id);
+    var n = document.createElement('span'); n.className='pname'; n.textContent=p.name;
+    var s = document.createElement('span'); s.className='pdesc'; s.textContent=p.desc;
+    label.appendChild(n); label.appendChild(s);
+    d.appendChild(input); d.appendChild(label);
+    box.appendChild(d);
+    input.addEventListener('change', function(){ applyPreset(p); });
+  });
+}
+
+function buildSelects(){
+  function opt(value, text){
+    var o=document.createElement('option'); o.value=value; o.textContent=text; return o;
+  }
+  elSrcSel.appendChild(opt('','― 選択 ―'));
+  SOURCE_MASTER.forEach(function(v){ elSrcSel.appendChild(opt(v,v)); });
+  elMedSel.appendChild(opt('','― 選択 ―'));
+  MEDIUM_MASTER.forEach(function(m){ elMedSel.appendChild(opt(m.v,m.label)); });
+
+  elSrcSel.addEventListener('change', function(){
+    if(this.value){ elSrc.value=this.value; update(); }
+  });
+  elMedSel.addEventListener('change', function(){
+    if(this.value){ elMed.value=this.value; update(); }
+  });
+}
+
+/* キャンペーン名を雛形から組み立てる
+   個別の名前があれば施策名の部分にも反映する
+   例）example_event_202609 ＋ mannaka-fes → example_event-mannaka-fes_202609 */
+function campaignFromTemplate(tpl, sub){
+  if(!tpl) return '';
+  var v = fillTemplate(tpl);
+  if(!sub) return v;
+  var parts = v.split('_');
+  if(parts.length >= 2) parts[1] = parts[1] + '-' + sub;
+  return parts.join('_');
+}
+
+/* 利用者がキャンペーン名を自分で書き換えていない間だけ、
+   個別の名前の変更に追随させる */
+function syncCampaign(){
+  if(!curPreset || !curPreset.campaign) return;
+  if(elCmp.value !== autoCampaign) return; // 手で編集済みなら触らない
+  var sub = normalizeSub(elSub.value);
+  if(sub && !VALID.test(sub)) return;      // 入力途中で不正な状態なら待つ
+  autoCampaign = campaignFromTemplate(curPreset.campaign, sub);
+  elCmp.value = autoCampaign;
+}
+
+function applyPreset(p){
+  // 前の用途の値が残らないよう、任意項目は毎回すべて入れ替える
+  curPreset = p;
+  elSrc.value = p.source;
+  elSub.value = '';
+  elMed.value = p.medium;
+  autoCampaign = campaignFromTemplate(p.campaign, '');
+  elCmp.value = autoCampaign;
+  elCnt.value = p.content;
+  elId.value  = '';
+  elTrm.value = '';
+  elSrcSel.value = SOURCE_MASTER.indexOf(p.source)>=0 ? p.source : '';
+  elMedSel.value = p.medium || '';
+  $('presetHint').textContent = p.id==='manual'
+    ? '参照元・メディアを手で入力してください。表記が他の施策とぶれないよう注意してください。'
+    : p.desc + ' 用の設定を入れました。キャンペーン名は必要に応じて書き換えてください。';
+  update();
+}
+
+/* =====================================================================
+   検証とURL生成
+   ===================================================================== */
+function validate(){
+  var errors = [], warns = [];
+
+  // --- 遷移先URL ---
+  var raw = elBase.value.trim();
+  var base = null;
+  if(!raw){
+    setMsg('msgUrl','遷移先URLを入力してください。'); mark(elBase,true); errors.push('url');
+  } else {
+    if(!/^https?:\/\//i.test(raw)){ raw = 'https://' + raw; }
+    try{
+      base = new URL(raw);
+      if(base.protocol!=='http:' && base.protocol!=='https:') throw new Error('scheme');
+      // ドメイン名の形になっているか（打ち間違いを弾く）
+      if(!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(base.hostname)){
+        throw new Error('host');
+      }
+      mark(elBase,false);
+      if(/utm_/i.test(base.search)){
+        setMsg('msgUrl','このURLには既にUTMが付いています。重複すると正しく計測できません。','warn');
+      } else if(/[?&]gclid=/i.test(base.search)){
+        setMsg('msgUrl','このURLにはGoogle広告のgclidが含まれています。広告用URLにUTMを付けないでください。');
+        errors.push('gclid');
+      } else if(base.hostname !== CLINIC.host && base.hostname !== 'www.'+CLINIC.host){
+        setMsg('msgUrl','自院ドメイン（'+CLINIC.host+'）以外のURLです。意図した宛先か確認してください。','warn');
+      } else {
+        setMsg('msgUrl','');
+      }
+    }catch(e){
+      setMsg('msgUrl','URLの形式が正しくありません。'); mark(elBase,true); errors.push('url');
+    }
+  }
+
+  // --- UTM各項目 ---
+  var fields = [
+    { el:elSrc, msg:'msgSrc', name:'utm_source', required:true, label:'utm_source' },
+    { el:elSub, msg:'msgSub', name:'_sub', required:false, label:'個別の名前' },
+    { el:elMed, msg:'msgMed', name:'utm_medium', required:true, label:'utm_medium' },
+    { el:elCmp, msg:'msgCmp', name:'utm_campaign', required:true, label:'utm_campaign' },
+    { el:elCnt, msg:'msgCnt', name:'utm_content', required:false, label:'utm_content' },
+    { el:elId,  msg:'msgId',  name:'utm_id', required:false, label:'utm_id' },
+    { el:elTrm, msg:'msgTrm', name:'utm_term', required:false, label:'utm_term' }
+  ];
+  var values = {};
+  fields.forEach(function(f){
+    var before = f.el.value;
+    var v = (f.name === '_sub') ? normalizeSub(before) : normalize(before);
+    if(v !== before && document.activeElement !== f.el){ f.el.value = v; }
+    values[f.name] = v;
+
+    if(!v){
+      if(f.required){
+        setMsg(f.msg, f.label+'を入力してください。'); mark(f.el,true); errors.push(f.name);
+      } else { setMsg(f.msg,''); mark(f.el,false); }
+      return;
+    }
+    if(!VALID.test(v)){
+      if(HAS_JP.test(v)){
+        setMsg(f.msg, f.name==='_sub'
+          ? '日本語は使えません。ローマ字で入力してください（例：まんなかフェス → mannaka-fes）。'
+          : '日本語は使えません。ローマ字（半角小文字）で入力してください。');
+      } else {
+        setMsg(f.msg,'半角小文字の英数字・ハイフン・アンダースコアだけが使えます。');
+      }
+      mark(f.el,true); errors.push(f.name); return;
+    }
+    if(v.length > 64){
+      setMsg(f.msg,'64文字以内で入力してください。'); mark(f.el,true); errors.push(f.name); return;
+    }
+    mark(f.el,false);
+    if(before !== v){
+      setMsg(f.msg, f.name==='_sub'
+        ? '「'+v+'」に整えました。単語の区切りはハイフン（-）に統一しています。'
+        : '使えない文字があったため「'+v+'」に自動変換しました。', 'warn');
+      return;
+    }
+    // 個別の追加チェック
+    if(f.name==='utm_medium' && SAFE_MEDIUM.indexOf(v)<0){
+      setMsg(f.msg,'この値はGA4の標準チャネル分類に載らないため「Unassigned」になります。カスタムチャネルグループの設定が必要です。','warn');
+      return;
+    }
+    if(f.name==='utm_campaign' && v.indexOf(CLINIC.code+'_')!==0){
+      setMsg(f.msg,'推奨形式は '+CLINIC.code+'_施策名_年月 です（例: '+CLINIC.code+'_event_'+thisYearMonth()+'）。','warn');
+      return;
+    }
+    setMsg(f.msg,'');
+  });
+
+  // utm_source を「基本値 + 個別の名前」で組み立てる
+  var srcBase = values['utm_source'];
+  var srcSub  = values['_sub'];
+  delete values['_sub'];
+  values['utm_source'] = composeSource(srcBase, srcSub);
+
+  if(values['utm_source'].length > 64){
+    setMsg('msgSub','参照元が64文字を超えました。個別の名前を短くしてください。');
+    mark(elSub,true); errors.push('utm_source');
+  }
+
+  // 組み立て結果を利用者に見せる
+  if(srcBase && srcSub && errors.indexOf('_sub')<0){
+    elSrcPrev.style.display='';
+    elSrcPrev.textContent = 'utm_source は「' + values['utm_source'] + '」になります。';
+  } else {
+    elSrcPrev.style.display='none';
+    elSrcPrev.textContent = '';
+  }
+
+  return { ok: errors.length===0, base: base, values: values };
+}
+
+function buildUrl(base, v){
+  var order = ['utm_id','utm_source','utm_medium','utm_campaign','utm_content','utm_term'];
+  var u = new URL(base.href);
+  order.forEach(function(k){
+    if(v[k]) u.searchParams.set(k, v[k]);
+  });
+  return u.toString();
+}
+
+/* URLを色分けして表示（パラメータ名を目立たせる） */
+function renderResult(url){
+  elResult.textContent = '';
+  elResult.classList.remove('empty');
+  var idx = url.indexOf('?');
+  if(idx < 0){ elResult.textContent = url; return; }
+  elResult.appendChild(document.createTextNode(url.slice(0, idx+1)));
+  url.slice(idx+1).split('&').forEach(function(pair, i){
+    if(i>0) elResult.appendChild(document.createTextNode('&'));
+    var eq = pair.indexOf('=');
+    var k = document.createElement('span');
+    k.className='k';
+    k.textContent = eq<0 ? pair : pair.slice(0, eq+1);
+    elResult.appendChild(k);
+    if(eq>=0) elResult.appendChild(document.createTextNode(pair.slice(eq+1)));
+  });
+}
+
+/* =====================================================================
+   QRコードの描画
+   ===================================================================== */
+function renderQr(url){
+  elQrBox.textContent='';
+  try{
+    currentQr = QR.encode(url, elEcl.value);
+  }catch(e){
+    currentQr = null;
+    var p=document.createElement('div'); p.className='qr-none';
+    p.textContent='URLが長すぎてQRコードを作れません。'; elQrBox.appendChild(p);
+    elQrMeta.textContent=''; btnPng.disabled=true; btnSvg.disabled=true; return;
+  }
+  var holder=document.createElement('div');
+  holder.innerHTML = QR.toSvg(currentQr, 4, 6);
+  var svg = holder.firstChild;
+  svg.setAttribute('width','260'); svg.setAttribute('height','260');
+  svg.setAttribute('role','img');
+  svg.setAttribute('aria-label','生成したURLのQRコード');
+  elQrBox.appendChild(svg);
+
+  var warn = url.length > 500 ? '　※URLが長く読み取りにくくなる可能性があります' : '';
+  elQrMeta.textContent = 'バージョン ' + currentQr.version + '（' + currentQr.size + '×' + currentQr.size +
+    'モジュール）／誤り訂正 ' + currentQr.ecl + '／URL ' + url.length + '文字' + warn;
+  btnPng.disabled=false; btnSvg.disabled=false;
+}
+
+/* =====================================================================
+   更新処理
+   ===================================================================== */
+function update(){
+  syncCampaign();
+  var r = validate();
+  if(!r.ok || !r.base){
+    currentUrl=''; currentQr=null;
+    elResult.className='result empty';
+    elResult.textContent='必須項目を入力すると、ここにURLが表示されます。';
+    elQrBox.textContent='';
+    var p=document.createElement('div'); p.className='qr-none';
+    p.innerHTML='URLが確定すると<br>QRコードが表示されます';
+    elQrBox.appendChild(p);
+    elQrMeta.textContent='';
+    btnCopy.disabled=true; btnPng.disabled=true; btnSvg.disabled=true;
+    setMsg('msgAll','');
+    return;
+  }
+  currentUrl = buildUrl(r.base, r.values);
+  renderResult(currentUrl);
+  btnCopy.disabled=false;
+  setMsg('msgAll','');
+  renderQr(currentUrl);
+}
+
+/* =====================================================================
+   コピーと保存
+   ===================================================================== */
+function toast(text){
+  var t=$('toast'); t.textContent=text; t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 1800);
+}
+
+function copyUrl(){
+  if(!currentUrl) return;
+  // 自動コピーがどうしても使えないときは、URLを選択状態にして手動コピーへ誘導する
+  function selectResult(){
+    try{
+      var range=document.createRange();
+      range.selectNodeContents(elResult);
+      var sel=window.getSelection();
+      sel.removeAllRanges(); sel.addRange(range);
+    }catch(e){}
+    var key = /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘ + C' : 'Ctrl + C';
+    setMsg('msgAll','URLを選択しました。'+key+' を押してコピーしてください。','warn');
+  }
+  function fallback(){
+    // Clipboard APIが使えない環境（ローカルファイル起動など）向け
+    var ta=document.createElement('textarea');
+    ta.value=currentUrl; ta.setAttribute('readonly','');
+    ta.style.position='fixed'; ta.style.top='-1000px';
+    document.body.appendChild(ta); ta.select();
+    var ok=false;
+    try{ ok=document.execCommand('copy'); }catch(e){ ok=false; }
+    document.body.removeChild(ta);
+    if(ok) toast('URLをコピーしました');
+    else selectResult();
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(currentUrl).then(function(){ toast('URLをコピーしました'); }, fallback);
+  } else { fallback(); }
+}
+
+function fileName(ext){
+  var parts = ['qr', elCmp.value || 'utm'];
+  if(elCnt.value) parts.push(elCnt.value);
+  return parts.join('_').replace(/[^a-z0-9_-]/g,'') + '.' + ext;
+}
+
+function download(blob, name){
+  var a=document.createElement('a');
+  var url=URL.createObjectURL(blob);
+  a.href=url; a.download=name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+
+function saveSvg(){
+  if(!currentQr) return;
+  download(new Blob([QR.toSvg(currentQr, 4, 8)], {type:'image/svg+xml'}), fileName('svg'));
+  toast('SVGを保存しました');
+}
+
+function savePng(){
+  if(!currentQr) return;
+  var canvas=document.createElement('canvas');
+  QR.toCanvas(currentQr, canvas, parseInt(elSize.value,10), 4);
+  canvas.toBlob(function(blob){
+    if(!blob){ setMsg('msgAll','PNGの生成に失敗しました。SVGでの保存をお試しください。'); return; }
+    download(blob, fileName('png'));
+    toast('PNGを保存しました（実寸 ' + canvas.width + 'px）');
+  }, 'image/png');
+}
+
+function resetAll(){
+  elBase.value = CLINIC.defaultUrl;
+  [elSrc,elSub,elMed,elCmp,elCnt,elId,elTrm].forEach(function(el){ el.value=''; });
+  elSrcSel.value=''; elMedSel.value='';
+  curPreset=null; autoCampaign='';
+  elSrcPrev.style.display='none'; elSrcPrev.textContent='';
+  var checked=document.querySelector('input[name=preset]:checked');
+  if(checked) checked.checked=false;
+  $('presetHint').textContent='用途を選ぶと、参照元・メディア・キャンペーン名が自動で入ります。';
+  ['msgUrl','msgSrc','msgSub','msgMed','msgCmp','msgCnt','msgId','msgTrm','msgAll'].forEach(function(id){ setMsg(id,''); });
+  [elBase,elSrc,elSub,elMed,elCmp,elCnt,elId,elTrm].forEach(function(el){ mark(el,false); });
+  update();
+  elBase.focus();
+}
+
+/* =====================================================================
+   初回設定の画面
+   ===================================================================== */
+var elSetup=$('setup'), elApp=$('app'), elClinicLabel=$('clinicLabel'),
+    elCfgName=$('cfgName'), elCfgUrl=$('cfgUrl'), elCfgCode=$('cfgCode'),
+    btnSaveCfg=$('btnSaveCfg'), btnCancelCfg=$('btnCancelCfg'), btnSetting=$('btnSetting');
+
+function showSetup(isEdit){
+  elSetup.hidden = false;
+  elApp.hidden = true;
+  btnSetting.hidden = true;
+  btnCancelCfg.hidden = !isEdit;
+  elCfgName.value = CLINIC.name || '';
+  elCfgUrl.value  = CLINIC.defaultUrl || '';
+  elCfgCode.value = CLINIC.code || '';
+  ['msgCfgName','msgCfgUrl','msgCfgCode','msgCfg'].forEach(function(id){ setMsg(id,''); });
+  if(!storageAvailable){
+    setMsg('msgCfg','このブラウザでは設定を保存できません（プライベートウィンドウなどの可能性があります）。'
+      + 'このまま進めますが、画面を閉じると設定は消えます。','warn');
+  }
+  elCfgName.focus();
+}
+
+function showApp(){
+  elSetup.hidden = true;
+  elApp.hidden = false;
+  btnSetting.hidden = false;
+  elClinicLabel.textContent = CLINIC.name + '　｜　' + CLINIC.host;
+  if(!elBase.value) elBase.value = CLINIC.defaultUrl;
+  update();
+}
+
+function commitConfig(){
+  var name = elCfgName.value.trim();
+  var url  = elCfgUrl.value.trim();
+  var code = normalizeSub(elCfgCode.value);
+  var ok = true;
+
+  if(!name){ setMsg('msgCfgName','医院名を入力してください。'); mark(elCfgName,true); ok=false; }
+  else { setMsg('msgCfgName',''); mark(elCfgName,false); }
+
+  var host = '';
+  if(!url){ setMsg('msgCfgUrl','ホームページのURLを入力してください。'); mark(elCfgUrl,true); ok=false; }
+  else {
+    if(!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    try{
+      var u = new URL(url);
+      if(!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(u.hostname)){
+        throw new Error('host');
+      }
+      host = u.hostname.replace(/^www\./,'');
+      url = u.toString();
+      setMsg('msgCfgUrl',''); mark(elCfgUrl,false);
+    }catch(e){
+      setMsg('msgCfgUrl','URLの形式が正しくありません。例：https://example.com/');
+      mark(elCfgUrl,true); ok=false;
+    }
+  }
+
+  if(!code){ setMsg('msgCfgCode','医院の略称を入力してください。'); mark(elCfgCode,true); ok=false; }
+  else if(!/^[a-z0-9-]+$/.test(code)){
+    setMsg('msgCfgCode','半角小文字の英数字とハイフンだけが使えます。'); mark(elCfgCode,true); ok=false;
+  } else if(code.length > 20){
+    setMsg('msgCfgCode','20文字以内にしてください。'); mark(elCfgCode,true); ok=false;
+  } else {
+    elCfgCode.value = code;
+    setMsg('msgCfgCode',''); mark(elCfgCode,false);
+  }
+
+  if(!ok){ setMsg('msgCfg','入力内容を確認してください。'); return; }
+
+  CLINIC = { name:name, code:code, defaultUrl:url, host:host };
+  configured = true;
+  var saved = saveConfig(CLINIC);
+  // 設定を変えたら、前の医院向けの入力は残さない
+  resetAll();
+  showApp();
+  toast(saved ? '設定を保存しました' : '設定しました（保存はできませんでした）');
+}
+
+btnSaveCfg.addEventListener('click', commitConfig);
+btnCancelCfg.addEventListener('click', function(){ if(configured) showApp(); });
+btnSetting.addEventListener('click', function(){ showSetup(true); });
+[elCfgName,elCfgUrl,elCfgCode].forEach(function(el){
+  el.addEventListener('keydown', function(e){ if(e.key==='Enter') commitConfig(); });
+});
+
+/* =====================================================================
+   初期化
+   ===================================================================== */
+buildPresets();
+buildSelects();
+
+[elBase,elSrc,elSub,elMed,elCmp,elCnt,elId,elTrm].forEach(function(el){
+  el.addEventListener('input', update);
+  el.addEventListener('blur', update);
+});
+elEcl.addEventListener('change', function(){ if(currentUrl) renderQr(currentUrl); });
+btnCopy.addEventListener('click', copyUrl);
+btnPng.addEventListener('click', savePng);
+btnSvg.addEventListener('click', saveSvg);
+btnReset.addEventListener('click', resetAll);
+
+// 保存済みの設定があれば本体を、なければ初回設定の画面を出す
+var savedCfg = loadConfig();
+if(savedCfg){
+  CLINIC = savedCfg;
+  configured = true;
+  elBase.value = CLINIC.defaultUrl;
+  showApp();
+} else {
+  showSetup(false);
+}
+
+// 動作確認用（ブラウザのコンソールから検証できるように公開）
+window.__utmBuilder = {
+  normalize: normalize,
+  getUrl: function(){ return currentUrl; },
+  getQr: function(){ return currentQr; },
+  setFields: function(o){
+    if(o.base!==undefined) elBase.value=o.base;
+    if(o.source!==undefined) elSrc.value=o.source;
+    if(o.sourceSub!==undefined) elSub.value=o.sourceSub;
+    if(o.medium!==undefined) elMed.value=o.medium;
+    if(o.campaign!==undefined) elCmp.value=o.campaign;
+    if(o.content!==undefined) elCnt.value=o.content;
+    if(o.id!==undefined) elId.value=o.id;
+    if(o.term!==undefined) elTrm.value=o.term;
+    update();
+    return currentUrl;
+  },
+  composeSource: composeSource,
+  normalizeSub: normalizeSub,
+  getConfig: function(){ return JSON.parse(JSON.stringify(CLINIC)); },
+  isConfigured: function(){ return configured; },
+  isSetupVisible: function(){ return !elSetup.hidden; },
+  isAppVisible: function(){ return !elApp.hidden; },
+  doSetup: function(name, url, code){
+    elCfgName.value=name; elCfgUrl.value=url; elCfgCode.value=code;
+    commitConfig();
+    return { ok: configured && !elApp.hidden, config: CLINIC };
+  },
+  openSetting: function(){ btnSetting.click(); },
+  clearStorage: function(){ try{ window.localStorage.removeItem(STORE_KEY); }catch(e){} },
+  storeKey: STORE_KEY
+};
+})();
+</script>
+
+</body>
+</html>
